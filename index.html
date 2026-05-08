@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EdgeLedger — Live Odds Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style-financial.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    .dash-layout { display: flex; height: calc(100vh - 73px); }
+    .dash-sidebar { width: 200px; min-width: 200px; background: #1a2332; display: flex; flex-direction: column; overflow-y: auto; border-right: 1px solid #243040; }
+    .sidebar-section-title { padding: 20px 16px 8px; font-size: 10px; font-weight: 700; color: #4a6080; text-transform: uppercase; letter-spacing: 1px; }
+    .league-item { padding: 11px 16px; font-size: 13px; color: #8a93a3; cursor: pointer; border-left: 3px solid transparent; display: flex; align-items: center; gap: 8px; transition: all 0.15s; user-select: none; }
+    .league-item:hover { color: #fff; background: rgba(255,255,255,0.05); }
+    .league-item.active { color: #fff; border-left-color: #4a9eff; background: rgba(74,158,255,0.08); font-weight: 600; }
+    .league-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; flex-shrink: 0; }
+    .league-live-count { margin-left: auto; font-size: 10px; font-weight: 700; background: rgba(231,76,60,0.2); color: #e74c3c; padding: 1px 6px; border-radius: 8px; }
+    .sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid #243040; }
+    .refresh-info { font-size: 10px; color: #4a6080; text-align: center; }
+    .dash-main { flex: 1; overflow-y: auto; padding: 20px 24px; background: #f0f2f5; }
+    .dash-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .dash-topbar-left { display: flex; align-items: center; gap: 12px; }
+    .dash-league-title { font-size: 15px; font-weight: 800; color: #1a2332; text-transform: uppercase; letter-spacing: 0.5px; }
+    .live-pill { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: #e74c3c; text-transform: uppercase; letter-spacing: 0.5px; }
+    .pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: #e74c3c; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(1.35); } }
+    .last-updated { font-size: 11px; color: #8a93a3; }
+    .match-card { background: white; border: 1px solid #dee2e6; border-radius: 4px; margin-bottom: 12px; overflow: hidden; }
+    .match-card.is-live { border-left: 3px solid #e74c3c; }
+    .card-header { background: #1a2332; padding: 11px 16px; display: flex; align-items: center; gap: 10px; }
+    .team-name { font-size: 13px; font-weight: 700; color: #fff; flex: 1; }
+    .team-name.home { text-align: right; }
+    .team-name.away { text-align: left; }
+    .score-block { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .score-num { font-size: 16px; font-weight: 800; color: #4a9eff; min-width: 16px; text-align: center; }
+    .score-sep { font-size: 14px; color: #4a6080; font-weight: 400; }
+    .minute-tag { font-size: 11px; font-weight: 700; color: #e74c3c; background: rgba(231,76,60,0.15); padding: 2px 8px; border-radius: 3px; border: 1px solid rgba(231,76,60,0.25); flex-shrink: 0; }
+    .kickoff-tag { font-size: 11px; color: #8a93a3; flex-shrink: 0; }
+    .markets-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid #e9ecef; }
+    .market-col { padding: 11px 14px; border-right: 1px solid #e9ecef; }
+    .market-col:last-child { border-right: none; }
+    .market-label { font-size: 10px; font-weight: 700; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 9px; }
+    .odds-line { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .odds-type { font-size: 10px; color: #adb5bd; min-width: 52px; }
+    .odds-value { font-size: 12px; font-weight: 600; color: #495057; text-align: right; }
+    .odds-value.live-val { color: #2c5aa0; }
+    .odds-value.muted { color: #adb5bd; font-weight: 400; }
+    .gap-row { display: flex; align-items: center; gap: 6px; margin-top: 9px; padding-top: 9px; border-top: 1px solid #e9ecef; }
+    .signal-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .signal-dot.green { background: #28a745; box-shadow: 0 0 4px rgba(40,167,69,0.45); }
+    .signal-dot.amber { background: #fd7e14; box-shadow: 0 0 4px rgba(253,126,20,0.4); }
+    .signal-dot.grey  { background: #ced4da; }
+    .signal-label { font-size: 10px; font-weight: 600; }
+    .signal-label.green { color: #28a745; }
+    .signal-label.amber { color: #fd7e14; }
+    .signal-label.grey  { color: #adb5bd; }
+    .gap-score-badge { margin-left: auto; font-size: 10px; color: #adb5bd; font-family: monospace; }
+    .stats-bar { display: flex; background: #f8f9fa; border-top: 1px solid #e9ecef; }
+    .stat-chip { flex: 1; padding: 7px 14px; font-size: 11px; color: #6c757d; display: flex; align-items: center; gap: 5px; border-right: 1px solid #e9ecef; }
+    .stat-chip:last-child { border-right: none; }
+    .stat-chip .stat-n { font-weight: 700; color: #495057; }
+    .state-box { text-align: center; padding: 60px 20px; color: #adb5bd; }
+    .state-box .state-title { font-size: 15px; font-weight: 600; color: #6c757d; margin-bottom: 8px; }
+    .state-box .state-sub { font-size: 13px; }
+    .loading-spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #dee2e6; border-radius: 50%; border-top-color: #2c5aa0; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .section-divider { font-size: 10px; font-weight: 700; color: #6c757d; text-transform: uppercase; letter-spacing: 0.8px; margin: 16px 0 8px; display: flex; align-items: center; gap: 8px; }
+    .section-divider::after { content: ''; flex: 1; height: 1px; background: #dee2e6; }
+  </style>
+</head>
+<body>
+
+<header class="main-header">
+  <div class="header-container">
+    <div class="header-logo">
+      <h1>EdgeLedger</h1>
+      <p class="header-tagline">Live Odds Monitor</p>
+    </div>
+    <nav class="header-nav">
+      <a href="#" class="active">Live</a>
+      <a href="#">Signals</a>
+      <a href="#">History</a>
+    </nav>
+  </div>
+</header>
+
+<div class="dash-layout">
+  <aside class="dash-sidebar">
+    <div class="sidebar-section-title">Leagues</div>
+    <div id="league-list"></div>
+    <div class="sidebar-footer">
+      <div class="refresh-info" id="refresh-info">Refreshing every 20s</div>
+    </div>
+  </aside>
+
+  <main class="dash-main">
+    <div class="dash-topbar">
+      <div class="dash-topbar-left">
+        <div class="dash-league-title" id="league-title">EPL</div>
+        <div class="live-pill" id="live-pill" style="display:none">
+          <div class="pulse-dot"></div>
+          <span id="live-count-label">0 live</span>
+        </div>
+      </div>
+      <div class="last-updated" id="last-updated"></div>
+    </div>
+    <div id="cards-container">
+      <div class="state-box">
+        <div class="loading-spinner"></div>
+        <div class="state-title">Loading fixtures…</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL  = 'https://jdzpevjxuhkdxeosorel.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkenBldmp4dWhrZHhlb3NvcmVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMTI0ODIsImV4cCI6MjA5Mjg4ODQ4Mn0.KUPFrz2z2pd-G6SsJpr18j4JXSmzygzKwNQDqGsEZEk';
+const POLL_MS = 20000;
+
+const LEAGUES = [
+  { id: 'EPL',        label: 'EPL' },
+  { id: 'La Liga',    label: 'La Liga' },
+  { id: 'Serie A',    label: 'Serie A' },
+  { id: 'Bundesliga', label: 'Bundesliga' },
+  { id: 'Ligue 1',    label: 'Ligue 1' },
+];
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+let activeLeague  = 'EPL';
+let pollTimer     = null;
+let liveCountsMap = {};
+
+// ============================================================
+// DATA FETCHING
+// ============================================================
+async function fetchAllData(league) {
+  const now  = new Date();
+  const from = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
+
+  const { data: fixtures, error: fErr } = await db
+    .from('fixtures')
+    .select('*')
+    .eq('league', league)
+    .gte('kickoff_at', from)
+    .not('status', 'in', '("finished","cancelled","postponed")')
+    .order('kickoff_at', { ascending: true });
+
+  if (fErr) throw fErr;
+  if (!fixtures || fixtures.length === 0) return { fixtures: [], prematch: [], liveState: [], liveOdds: [], signals: [] };
+
+  const ids = fixtures.map(f => f.id);
+
+  const [
+    { data: prematch  },
+    { data: liveState },
+    { data: liveOdds  },
+    { data: signals   },
+  ] = await Promise.all([
+    db.from('prematch_odds')    .select('*').in('fixture_id', ids),
+    db.from('live_match_state') .select('*').in('fixture_id', ids),
+    db.from('live_odds')        .select('*').in('fixture_id', ids),
+    db.from('signals')          .select('*').in('fixture_id', ids).eq('is_active', true),
+  ]);
+
+  return {
+    fixtures:   fixtures   || [],
+    prematch:   prematch   || [],
+    liveState:  liveState  || [],
+    liveOdds:   liveOdds   || [],
+    signals:    signals    || [],
+  };
+}
+
+async function fetchLiveCounts() {
+  const { data } = await db.from('fixtures').select('league').eq('status', 'live');
+  const counts = {};
+  (data || []).forEach(r => { counts[r.league] = (counts[r.league] || 0) + 1; });
+  liveCountsMap = counts;
+}
+
+// ============================================================
+// RENDER HELPERS
+// ============================================================
+function fmtOdds(line, odds, cls = '') {
+  if (line == null || odds == null) return `<span class="odds-value muted">—</span>`;
+  return `<span class="odds-value ${cls}">O ${parseFloat(line).toFixed(1)} @ ${parseFloat(odds).toFixed(2)}</span>`;
+}
+
+function fmtTime(isoStr) {
+  return new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function timeRemaining(minute) {
+  if (minute == null) return '—';
+  const m = parseInt(minute);
+  if (m <= 90) return `${Math.max(0, 90 - m)}'`;
+  return `ET`;
+}
+
+function buildMarketCol(market, preRow, liveRow, isLive, signal) {
+  const marketLabels = { goals: 'Goals', corners: 'Corners', cards: 'Cards' };
+
+  const preOdds  = preRow  ? fmtOdds(preRow.line, preRow.over_odds) : `<span class="odds-value muted">—</span>`;
+  const liveOdds = liveRow ? fmtOdds(liveRow.line, liveRow.over_odds, 'live-val')
+                           : `<span class="odds-value muted">${isLive ? 'Fetching…' : 'Awaiting KO'}</span>`;
+
+  // Signal indicator
+  let sigClass = 'grey';
+  let sigLabel = 'Monitoring';
+  let sigScore = '—';
+
+  if (signal) {
+    sigClass = signal.signal;  // 'green' | 'amber'
+    sigLabel = signal.signal === 'green' ? 'Strong' : 'Amber';
+    sigScore = signal.gap_score != null ? parseFloat(signal.gap_score).toFixed(2) : '—';
+  }
+
+  return `
+    <div class="market-col">
+      <div class="market-label">${marketLabels[market]}</div>
+      <div class="odds-line">
+        <span class="odds-type">Pre-match</span>${preOdds}
+      </div>
+      <div class="odds-line">
+        <span class="odds-type">Live</span>${liveOdds}
+      </div>
+      <div class="gap-row">
+        <div class="signal-dot ${sigClass}"></div>
+        <span class="signal-label ${sigClass}">${sigLabel}</span>
+        <span class="gap-score-badge">${sigScore}</span>
+      </div>
+    </div>`;
+}
+
+function buildMatchCard(fixture, preRows, stateRow, liveRows, signalRows) {
+  const isLive = fixture.status === 'live';
+
+  const preByMarket    = {};
+  const liveByMarket   = {};
+  const signalByMarket = {};
+
+  (preRows     || []).forEach(r => { preByMarket[r.market]    = r; });
+  (liveRows    || []).forEach(r => { liveByMarket[r.market]   = r; });
+  (signalRows  || []).forEach(r => { signalByMarket[r.market] = r; });
+
+  const minute = stateRow ? (stateRow.inplay_minute ?? stateRow.minute) : null;
+  const hScore = stateRow ? stateRow.home_score : 0;
+  const aScore = stateRow ? stateRow.away_score : 0;
+
+  const statusTag = isLive
+    ? `<span class="minute-tag">${minute != null ? (minute <= 90 ? minute + "'" : '90+' + (minute - 90) + "'") : 'LIVE'}</span>`
+    : `<span class="kickoff-tag">KO ${fmtTime(fixture.kickoff_at)}</span>`;
+
+  const totalCorners = stateRow ? (stateRow.home_corners + stateRow.away_corners) : null;
+  const totalCards   = stateRow ? (stateRow.home_yellow + stateRow.away_yellow + stateRow.home_red + stateRow.away_red) : null;
+  const totalGoals   = stateRow ? (stateRow.home_score + stateRow.away_score) : null;
+
+  let statsBar = '';
+  if (isLive && stateRow) {
+    statsBar = `
+      <div class="stats-bar">
+        <div class="stat-chip">Corners: <span class="stat-n">${totalCorners}</span></div>
+        <div class="stat-chip">Cards: <span class="stat-n">${totalCards}</span></div>
+        <div class="stat-chip">Goals: <span class="stat-n">${totalGoals}</span></div>
+        <div class="stat-chip">Remaining: <span class="stat-n">${timeRemaining(minute)}</span></div>
+      </div>`;
+  } else {
+    const koDate = new Date(fixture.kickoff_at);
+    const koStr  = koDate.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
+                 + ' ' + koDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    statsBar = `
+      <div class="stats-bar">
+        <div class="stat-chip" style="flex:4; color:#adb5bd">
+          Prematch — odds captured, match starts ${koStr}
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="match-card ${isLive ? 'is-live' : ''}">
+      <div class="card-header">
+        <div class="team-name home">${fixture.home_team}</div>
+        <div class="score-block">
+          <span class="score-num">${hScore}</span>
+          <span class="score-sep">–</span>
+          <span class="score-num">${aScore}</span>
+        </div>
+        <div class="team-name away">${fixture.away_team}</div>
+        ${statusTag}
+      </div>
+      <div class="markets-grid">
+        ${buildMarketCol('goals',   preByMarket['goals'],   liveByMarket['goals'],   isLive, signalByMarket['goals'])}
+        ${buildMarketCol('corners', preByMarket['corners'], liveByMarket['corners'], isLive, signalByMarket['corners'])}
+        ${buildMarketCol('cards',   preByMarket['cards'],   liveByMarket['cards'],   isLive, signalByMarket['cards'])}
+      </div>
+      ${statsBar}
+    </div>`;
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function render(data, league) {
+  const { fixtures, prematch, liveState, liveOdds, signals } = data;
+
+  document.getElementById('league-title').textContent = league;
+  document.getElementById('last-updated').textContent =
+    'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  const live    = fixtures.filter(f => f.status === 'live');
+  const premFix = fixtures.filter(f => f.status === 'prematch');
+
+  const livePill = document.getElementById('live-pill');
+  if (live.length > 0) {
+    livePill.style.display = 'flex';
+    document.getElementById('live-count-label').textContent = live.length + ' live';
+  } else {
+    livePill.style.display = 'none';
+  }
+
+  const preByFixture    = {};
+  const stateByFixture  = {};
+  const liveByFixture   = {};
+  const signalByFixture = {};
+
+  prematch.forEach(r => { (preByFixture[r.fixture_id]  = preByFixture[r.fixture_id]  || []).push(r); });
+  liveOdds.forEach(r => { (liveByFixture[r.fixture_id] = liveByFixture[r.fixture_id] || []).push(r); });
+  liveState.forEach(r => { stateByFixture[r.fixture_id] = r; });
+  signals.forEach(r   => { (signalByFixture[r.fixture_id] = signalByFixture[r.fixture_id] || []).push(r); });
+
+  const container = document.getElementById('cards-container');
+
+  if (fixtures.length === 0) {
+    container.innerHTML = `
+      <div class="state-box">
+        <div class="state-title">No fixtures found</div>
+        <div class="state-sub">No upcoming or live matches for ${league} right now.</div>
+      </div>`;
+    return;
+  }
+
+  let html = '';
+
+  if (live.length > 0) {
+    html += `<div class="section-divider">Live now</div>`;
+    live.forEach(f => {
+      html += buildMatchCard(f, preByFixture[f.id], stateByFixture[f.id], liveByFixture[f.id], signalByFixture[f.id]);
+    });
+  }
+
+  if (premFix.length > 0) {
+    html += `<div class="section-divider">Upcoming</div>`;
+    premFix.forEach(f => {
+      html += buildMatchCard(f, preByFixture[f.id], stateByFixture[f.id], liveByFixture[f.id], signalByFixture[f.id]);
+    });
+  }
+
+  container.innerHTML = html;
+}
+
+function renderSidebar() {
+  const list = document.getElementById('league-list');
+  list.innerHTML = LEAGUES.map(l => {
+    const count = liveCountsMap[l.id] || 0;
+    const badge = count > 0 ? `<span class="league-live-count">${count}</span>` : '';
+    const cls   = l.id === activeLeague ? 'active' : '';
+    return `
+      <div class="league-item ${cls}" data-league="${l.id}">
+        <div class="league-dot"></div>
+        ${l.label}
+        ${badge}
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.league-item').forEach(el => {
+    el.addEventListener('click', () => {
+      activeLeague = el.dataset.league;
+      clearInterval(pollTimer);
+      startPolling();
+      renderSidebar();
+    });
+  });
+}
+
+// ============================================================
+// POLLING
+// ============================================================
+async function tick() {
+  try {
+    const [data] = await Promise.all([
+      fetchAllData(activeLeague),
+      fetchLiveCounts(),
+    ]);
+    render(data, activeLeague);
+    renderSidebar();
+  } catch (err) {
+    console.error('Poll error:', err);
+    document.getElementById('last-updated').textContent = 'Error fetching data — retrying…';
+  }
+}
+
+function startPolling() {
+  document.getElementById('cards-container').innerHTML = `
+    <div class="state-box">
+      <div class="loading-spinner"></div>
+      <div class="state-title">Loading fixtures…</div>
+    </div>`;
+  tick();
+  pollTimer = setInterval(tick, POLL_MS);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+renderSidebar();
+startPolling();
+</script>
+</body>
+</html>
