@@ -211,12 +211,15 @@ function buildMarketCol(market, preRow, liveRow, isLive, signal) {
   // Signal indicator
   let sigClass = 'grey';
   let sigLabel = 'Monitoring';
-  let sigScore = '—';
 
-  if (signal) {
-    sigClass = signal.signal;  // 'green' | 'amber'
+  if (market === 'goals' && liveRow && liveRow.gap_score != null) {
+    const gap    = liveRow.gap_score;
+    const gapPct = (gap * 100).toFixed(1);
+    sigLabel = (gap >= 0 ? '+' : '') + gapPct + '%';
+    sigClass = gap >= 0.08 ? 'green' : (gap >= 0.04 ? 'amber' : 'grey');
+  } else if (signal) {
+    sigClass = signal.signal;
     sigLabel = signal.signal === 'green' ? 'Strong' : 'Amber';
-    sigScore = signal.gap_score != null ? parseFloat(signal.gap_score).toFixed(2) : '—';
   }
 
   return `
@@ -231,7 +234,6 @@ function buildMarketCol(market, preRow, liveRow, isLive, signal) {
       <div class="gap-row">
         <div class="signal-dot ${sigClass}"></div>
         <span class="signal-label ${sigClass}">${sigLabel}</span>
-        <span class="gap-score-badge">${sigScore}</span>
       </div>
     </div>`;
 }
